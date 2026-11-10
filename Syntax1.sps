@@ -1007,4 +1007,54 @@ SAVE TRANSLATE OUTFILE=OutExcel
   /KEEP = year quarter geo_code age_group value.
 DATASET CLOSE B36.
 
+* =========================================================================.
+* BIỂU 37: PHÂN BỐ SỐ LƯỢNG NGƯỜI THEO KHOẢNG THU NHẬP (Nhảy bậc 2 triệu đồng)
+* =========================================================================.
+DATASET ACTIVATE MicroLFS.
+DATASET DECLARE B37_Temp.
+DATASET COPY B37_Temp.
+DATASET ACTIVATE B37_Temp.
+
+SELECT IF (luong_thang > 0).
+COMPUTE income_grp = TRUNC(luong_thang / 2000000).
+IF (income_grp >= 15) income_grp = 14.
+COMPUTE income_lower = income_grp * 2000000.
+COMPUTE income_upper = (income_grp + 1) * 2000000.
+DATASET DECLARE B37.
+AGGREGATE
+  /OUTFILE='B37'
+  /BREAK=year quarter geo_order geo_code income_lower income_upper
+  /value=N.
+DATASET CLOSE B37_Temp.
+DATASET ACTIVATE B37.
+SORT CASES BY year(A) quarter(A) geo_order(A) geo_code(A) income_lower(A).
+MATCH FILES FILE=* /DROP=geo_order.
+ALTER TYPE year quarter (F4.0).
+ALTER TYPE income_lower income_upper value (F12.0).
+SELECT IF NOT MISSING(value).
+SAVE TRANSLATE OUTFILE=OutExcel
+  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
+  /EXCELOPTIONS SHEET='LFS_37_PHAN_BO_THU_NHAP'
+  /KEEP = year quarter geo_code income_lower income_upper value.
+
+DATASET CLOSE B37.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
