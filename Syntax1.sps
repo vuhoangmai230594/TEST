@@ -49,12 +49,12 @@ COMPUTE vn_code = 'VN'.
 COMPUTE tinh_code = STRING(MaTinh, N2).
 
 * Ánh xạ MaTinh sang 6 Vùng KT-XH (chuẩn cho cả hệ 63 tỉnh và 34 tỉnh).
-IF ANY(MaTinh, 2, 4, 6, 8, 10, 11, 12, 14, 15, 17, 19, 20, 24, 25) vung_code = 'V1'.
-IF ANY(MaTinh, 1, 22, 26, 27, 30, 31, 33, 34, 35, 36, 37)          vung_code = 'V2'.
-IF ANY(MaTinh, 38, 40, 42, 44, 45, 46, 48, 49, 51, 52, 54, 56, 58, 60) vung_code = 'V3'.
-IF ANY(MaTinh, 62, 64, 66, 67, 68)                                 vung_code = 'V4'.
-IF ANY(MaTinh, 70, 72, 74, 75, 77, 79)                             vung_code = 'V5'.
-IF ANY(MaTinh, 80, 82, 83, 84, 86, 87, 89, 91, 92, 93, 94, 95, 96) vung_code = 'V6'.
+IF ANY(MaTinh, 4, 8, 11, 12, 14, 15, 19, 20, 25) vung_code = 'V1'.
+IF ANY(MaTinh, 1, 22, 24, 31, 33, 37)            vung_code = 'V2'.
+IF ANY(MaTinh, 38, 40, 42, 44, 46)                vung_code = 'V3'.
+IF ANY(MaTinh, 48, 51, 56, 52, 66, 68)              vung_code = 'V4'.
+IF ANY(MaTinh, 75, 79, 80)                       vung_code = 'V5'.
+IF ANY(MaTinh, 82, 86, 91, 92, 96)               vung_code = 'V6'.
 EXECUTE.
 * -------------------------------------------------------------------------.
 * KHỐI 3: CÁC BIẾN PHÂN TỔ CHUẨN TEMPLATE EXCEL (LẤY TỪ C02, C04, TTNT...)
@@ -224,7 +224,7 @@ EXECUTE.
 SET TVARS=NAMES TNUMBERS=VALUES.
 DATASET NAME MicroLFS.
 * Đường dẫn file.
-FILE HANDLE OutExcel /NAME='C:\Users\vmhoang\Desktop\Dashboard\3_Output.xlsx'.
+FILE HANDLE OutExcel /NAME='C:\Users\vmhoang\Desktop\Dashboard\3_Output\Table.xlsx'.
 
 * -------------------------------------------------------------------------.
 * BIỂU 01: LỰC LƯỢNG LAO ĐỘNG (Không phân tổ)
@@ -617,7 +617,6 @@ SAVE TRANSLATE OUTFILE=OutExcel
   /EXCELOPTIONS SHEET='16_TN_THANH_NIEN'
   /KEEP = year quarter geo_code value.
 DATASET CLOSE B16.
-
 * =========================================================================.
 * BIỂU 17: TỶ LỆ THẤT NGHIỆP TRONG ĐỘ TUỔI LAO ĐỘNG (Không phân tổ)
 * =========================================================================.
