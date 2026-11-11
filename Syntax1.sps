@@ -210,6 +210,10 @@ COMPUTE ind_36 = $SYSMIS.
 IF (CoVL19 = 1 AND tuoild = 1) ind_36 = 0.
 IF (CoVL19 = 1 AND tuoild = 1 AND Thieuvieclam = 1) ind_36 = 100.
 
+
+* Biểu 37: Histogram lương.
+COMPUTE ind_37 = $SYSMIS.
+
 * Khai báo thang đo chuẩn cho CTABLES.
 VARIABLE LEVEL year quarter vn_code vung_code tinh_code 
                area sex age_group age_group_36 sector_str job_status informal_status (NOMINAL).
@@ -242,7 +246,7 @@ CTABLES
   /SLABELS VISIBLE=NO
   /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
 OMSEND TAG=['t01'].
-* Xử lý Dataset kết quả và xuất đè vào sheet 01_LLLD.
+
 DATASET ACTIVATE B01.
 RENAME VARIABLES (Var1 Var2 Var3 Var4 = year quarter geo_code value).
 SELECT IF NOT MISSING(value).
@@ -1011,33 +1015,40 @@ DATASET CLOSE B36.
 * BIỂU 37: PHÂN BỐ SỐ LƯỢNG NGƯỜI THEO KHOẢNG THU NHẬP (Nhảy bậc 2 triệu đồng)
 * =========================================================================.
 DATASET ACTIVATE MicroLFS.
-DATASET DECLARE B37_Temp.
-DATASET COPY B37_Temp.
-DATASET ACTIVATE B37_Temp.
+DATASET DECLARE B37.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
+    /DESTINATION FORMAT=SAV OUTFILE='B37' /TAG='t37'.
 
+TEMPORARY.
 SELECT IF (luong_thang > 0).
-COMPUTE income_grp = TRUNC(luong_thang / 2000000).
-IF (income_grp >= 15) income_grp = 14.
+CTABLES
+  /VLABELS VARIABLES=year quarter vn_code vung_code income_grp DISPLAY=NONE
+  /TABLE year > quarter > geo_order > geo_code > income_grp [COUNT F40.0]
+  /SLABELS VISIBLE=NO
+  /CATEGORIES VARIABLES=year quarter geo_order geo_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
+  /CATEGORIES VARIABLES=income_grp [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
+              EMPTY=INCLUDE TOTAL=NO.
+OMSEND TAG=['t37'].
+
+DATASET ACTIVATE B37.
+* Bảng sinh ra 5 cột định danh + 1 cột Count.
+RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Count = year quarter geo_order geo_code income_grp value).
+
 COMPUTE income_lower = income_grp * 2000000.
 COMPUTE income_upper = (income_grp + 1) * 2000000.
-DATASET DECLARE B37.
-AGGREGATE
-  /OUTFILE='B37'
-  /BREAK=year quarter geo_order geo_code income_lower income_upper
-  /value=N.
-DATASET CLOSE B37_Temp.
-DATASET ACTIVATE B37.
-SORT CASES BY year(A) quarter(A) geo_order(A) geo_code(A) income_lower(A).
-MATCH FILES FILE=* /DROP=geo_order.
+
+MATCH FILES FILE=* /DROP=geo_order income_grp.
+SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
 ALTER TYPE income_lower income_upper value (F12.0).
-SELECT IF NOT MISSING(value).
+
 SAVE TRANSLATE OUTFILE=OutExcel
   /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
   /EXCELOPTIONS SHEET='LFS_37_PHAN_BO_THU_NHAP'
   /KEEP = year quarter geo_code income_lower income_upper value.
-
 DATASET CLOSE B37.
+
+
 
 
 
