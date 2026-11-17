@@ -2,7 +2,9 @@
 * =========================================================================.
 * PHẦN 1: CHUẨN HÓA MÃ PHÂN TỔ & CHỈ TIÊU TỪ FILE MICRODATA LFS
 * =========================================================================.
-WEIGHT BY Final_Weight_11.
+* Khai báo thang đo chuẩn cho CTABLES.
+ALTER TYPE MaTinh (F2.0) ThangDT (F2.0) TTNT(F1.0).
+WEIGHT BY Final_Weight.
 *Tao biến HĐKT.
 IF  ((C19= 1| C27=4| C28 = 1 | C28= 2|C29=2| C30=1)) HDKT19=1.
 IF  ((C31 = 1 | C32= 1) & C36=1) HDKT19=2.
@@ -12,6 +14,7 @@ RECODE HDKT19 (MISSING=3).
 END IF.
 IF  (c04 >=15 & c06=2 ) HDKT19=4.
 EXECUTE.
+*Nếu đã có HĐKT, bắt đầu từ đây.
 IF (HDKT19 <= 3 & C04 >= 15) DS15 = 1.
 RECODE HDKT19 (1 thru 2 = 1) INTO LLLD19.
 RECODE HDKT19 (1 = 1)        INTO CoVL19.
@@ -37,7 +40,9 @@ EXECUTE.
 * -------------------------------------------------------------------------.
 * KHỐI 1: THỜI GIAN (year, quarter)
 * -------------------------------------------------------------------------.
-COMPUTE year = NUMBER(NamDT, F4.0).
+
+COMPUTE year = 2025.
+EXECUTE.
 COMPUTE quarter = TRUNC((ThangDT - 1) / 3) + 1.
 FORMATS year quarter (F4.0).
 EXECUTE.
@@ -57,7 +62,7 @@ IF ANY(MaTinh, 75, 79, 80)                       vung_code = 'V5'.
 IF ANY(MaTinh, 82, 86, 91, 92, 96)               vung_code = 'V6'.
 EXECUTE.
 * -------------------------------------------------------------------------.
-* KHỐI 3: CÁC BIẾN PHÂN TỔ CHUẨN TEMPLATE EXCEL (LẤY TỪ C02, C04, TTNT...)
+* KHỐI 3: CÁC BIẾN PHÂN TỔ CHUẨN TEMPLATE EXCEL (LẤY TỪ C02, C04, TTNT...), Xóa biến SEX cũ
 * -------------------------------------------------------------------------.
 STRING area (A5) sex (A3) age_group (A5) age_group_36 (A5) 
        sector_str (A3) job_status (A8) informal_status (A8).
@@ -130,11 +135,13 @@ NUMERIC tiemnang (F1.0) khongsdhet (F1.0).
 IF (HDKT19 = 3 & (((C31 = 1 | C32 = 1) & C36 = 2) | (C31 = 2 & C36 = 1))) tiemnang = 1.
 IF (HDKT19 = 2 | Thieuvieclam = 1 | tiemnang = 1) khongsdhet = 1.
 EXECUTE.
+* 5. Tự sản tự tiêu (TSTT) - Dành riêng cho biểu 30.
+NUMERIC TSTT (F1.0).
+IF (ANY(HDKT19, 2, 3) & ANY(C28, 3, 4)) TSTT = 1.
 
 * -------------------------------------------------------------------------.
 * KHỐI 5: CÁC BIẾN ĐỊNH LƯỢNG (SCALE) ĐỂ TÍNH MEAN / MEDIAN TRONG CTABLES
 * -------------------------------------------------------------------------.
-
 * Thu nhập tháng (đổi từ nghìn đồng sang đồng trên người có việc làm có thu nhập C66 > 0).
 COMPUTE luong_thang = $SYSMIS.
 IF (CoVL19 = 1 AND C66 > 0) luong_thang = C66 * 1000.
@@ -210,13 +217,13 @@ COMPUTE ind_36 = $SYSMIS.
 IF (CoVL19 = 1 AND tuoild = 1) ind_36 = 0.
 IF (CoVL19 = 1 AND tuoild = 1 AND Thieuvieclam = 1) ind_36 = 100.
 
-
 * Biểu 37: Histogram lương.
-COMPUTE ind_37 = $SYSMIS.
+COMPUTE income_grp = TRUNC(luong_thang / 2000000).
+IF (income_grp > 14) income_grp = 14.
 
 * Khai báo thang đo chuẩn cho CTABLES.
 VARIABLE LEVEL year quarter vn_code vung_code tinh_code 
-               area sex age_group age_group_36 sector_str job_status informal_status (NOMINAL).
+               area sex age_group age_group_36 sector_str job_status informal_status income_grp (NOMINAL).
 VARIABLE LEVEL luong_thang ind_03 ind_04 ind_09 ind_10 ind_11 ind_15 
                ind_16 ind_17 ind_18 ind_25 ind_26 ind_32 ind_34 ind_36 (SCALE).
 EXECUTE.
@@ -230,6 +237,7 @@ DATASET NAME MicroLFS.
 * Đường dẫn file.
 FILE HANDLE OutExcel /NAME='C:\Users\vmhoang\Desktop\Dashboard\3_Output\Table.xlsx'.
 
+FILE HANDLE OutExcel /NAME='C:\Users\admin\Desktop\GITHUB\TEST\3_Output\Table.xlsx'.
 * -------------------------------------------------------------------------.
 * BIỂU 01: LỰC LƯỢNG LAO ĐỘNG (Không phân tổ)
 * -------------------------------------------------------------------------.
@@ -241,20 +249,23 @@ OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table']
 TEMPORARY.
 SELECT IF (LLLD19 = 1).
 CTABLES
-  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code DISPLAY=NONE
-  /TABLE year > quarter > (vn_code + vung_code + tinh_code) [COUNT F40.0]
+/VLABELS VARIABLES=year quarter vn_code vung_code tinh_code sex area age_group DISPLAY=NONE
+  /TABLE year > quarter > (vn_code + vung_code + tinh_code) > sex > area > age_group [COUNT F40.0]
   /SLABELS VISIBLE=NO
-  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
+  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
+  /CATEGORIES VARIABLES=sex ['M', 'F'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=area ['Urban', 'Rural'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=age_group ['15-24', '25-34', '35-44', '45-54', '55-64', '65+'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE.
 OMSEND TAG=['t01'].
 
 DATASET ACTIVATE B01.
-RENAME VARIABLES (Var1 Var2 Var3 Var4 = year quarter geo_code value).
+RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Var6 Var7 = year quarter geo_code sex area age_group value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
 SAVE TRANSLATE OUTFILE=OutExcel
   /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /REPLACE
   /EXCELOPTIONS SHEET='01_LLLD'
-  /KEEP = year quarter geo_code value.
+  /KEEP = year quarter geo_code sex area age_group value.
 DATASET CLOSE B01.
 
 * -------------------------------------------------------------------------.
@@ -308,6 +319,32 @@ SAVE TRANSLATE OUTFILE=OutExcel
   /EXCELOPTIONS SHEET='03_TL_THAM_GIA'
   /KEEP = year quarter geo_code sex value.
 DATASET CLOSE B03.
+* -------------------------------------------------------------------------.
+* BIỂU 04: TỶ LỆ THẤT NGHIỆP (Phân tổ 3 chiều)
+* -------------------------------------------------------------------------.
+DATASET ACTIVATE MicroLFS.
+DATASET DECLARE B04.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
+    /DESTINATION FORMAT=SAV OUTFILE='B04' /TAG='t04'.
+CTABLES
+  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code sex area age_group ind_04 DISPLAY=NONE
+  /TABLE year > quarter > (vn_code + vung_code + tinh_code) > sex > area > age_group BY ind_04 [MEAN F40.6]
+  /SLABELS VISIBLE=NO
+  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
+  /CATEGORIES VARIABLES=sex ['M', 'F'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=area ['Urban', 'Rural'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=age_group ['15-24', '25-34', '35-44', '45-54', '55-64', '65+'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE.
+OMSEND TAG=['t04'].
+
+DATASET ACTIVATE B04.
+RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Var6 V10 = year quarter geo_code sex area age_group value).
+SELECT IF NOT MISSING(value).
+ALTER TYPE year quarter (F4.0).
+SAVE TRANSLATE OUTFILE=OutExcel
+  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
+  /EXCELOPTIONS SHEET='04_TL_THAT_NGHIEP'
+  /KEEP = year quarter geo_code sex area age_group value.
+DATASET CLOSE B04.
 
 * -------------------------------------------------------------------------.
 * BIỂU 05: THU NHẬP BÌNH QUÂN (Phân tổ 4 chiều: Giới tính x Khu vực x Ngành x Phi chính thức)
@@ -366,7 +403,7 @@ SAVE TRANSLATE OUTFILE=OutExcel
 DATASET CLOSE B06.
 
 * =========================================================================.
-* BIỂU 07: SỐ NGƯỜI THẤT NGHIỆP (Không phân tổ)
+* BIỂU 07: SỐ NGƯỜI THẤT NGHIỆP (Phân tổ 3 chiều)
 * =========================================================================.
 
 DATASET ACTIVATE MicroLFS.
@@ -376,21 +413,23 @@ OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table']
 TEMPORARY.
 SELECT IF (Thatnghiep19 = 1).
 CTABLES
-  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code DISPLAY=NONE
-  /TABLE year > quarter > (vn_code + vung_code + tinh_code) [COUNT F40.0]
+  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code sex area age_group DISPLAY=NONE
+  /TABLE year > quarter > (vn_code + vung_code + tinh_code) > sex > area > age_group [COUNT F40.0]
   /SLABELS VISIBLE=NO
-  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
+  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
+  /CATEGORIES VARIABLES=sex ['M', 'F'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=area ['Urban', 'Rural'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE
+  /CATEGORIES VARIABLES=age_group ['15-24', '25-34', '35-44', '45-54', '55-64', '65+'] EMPTY=INCLUDE TOTAL=YES LABEL='ALL' POSITION=BEFORE.
 OMSEND TAG=['t07'].
 
 DATASET ACTIVATE B07.
-* Đổi tên 3 cột phân tổ và 1 cột số đếm (Var4).
-RENAME VARIABLES (Var1 Var2 Var3 Var4 = year quarter geo_code value).
+RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Var6 Var7 = year quarter geo_code sex area age_group value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
 SAVE TRANSLATE OUTFILE=OutExcel
   /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
   /EXCELOPTIONS SHEET='07_SO_THAT_NGHIEP'
-  /KEEP = year quarter geo_code value.
+  /KEEP = year quarter geo_code sex area age_group value.
 DATASET CLOSE B07.
 
 * =========================================================================.
@@ -698,13 +737,13 @@ SAVE TRANSLATE OUTFILE=OutExcel
   /KEEP = year quarter geo_code value.
 DATASET CLOSE B19.
 
+
 * =========================================================================.
 * BIỂU 20: PHÂN VỊ THU NHẬP P10 (Không phân tổ)
 * =========================================================================.
 DATASET ACTIVATE MicroLFS.
 DATASET DECLARE B20.
-OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
-    /DESTINATION FORMAT=SAV OUTFILE='B20' /TAG='t20'.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] /DESTINATION FORMAT=SAV OUTFILE='B20' /TAG='t20'.
 TEMPORARY.
 SELECT IF (luong_thang > 0).
 CTABLES
@@ -713,15 +752,11 @@ CTABLES
   /SLABELS VISIBLE=NO
   /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
 OMSEND TAG=['t20'].
-
 DATASET ACTIVATE B20.
 RENAME VARIABLES (Var1 Var2 Var3 V7 = year quarter geo_code value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
-SAVE TRANSLATE OUTFILE=OutExcel
-  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
-  /EXCELOPTIONS SHEET='20_LUONG_P10'
-  /KEEP = year quarter geo_code value.
+SAVE TRANSLATE OUTFILE=OutExcel /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND /EXCELOPTIONS SHEET='20_LUONG_P10' /KEEP = year quarter geo_code value.
 DATASET CLOSE B20.
 
 * =========================================================================.
@@ -729,8 +764,7 @@ DATASET CLOSE B20.
 * =========================================================================.
 DATASET ACTIVATE MicroLFS.
 DATASET DECLARE B21.
-OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
-    /DESTINATION FORMAT=SAV OUTFILE='B21' /TAG='t21'.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] /DESTINATION FORMAT=SAV OUTFILE='B21' /TAG='t21'.
 TEMPORARY.
 SELECT IF (luong_thang > 0).
 CTABLES
@@ -744,11 +778,112 @@ DATASET ACTIVATE B21.
 RENAME VARIABLES (Var1 Var2 Var3 V7 = year quarter geo_code value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
+SAVE TRANSLATE OUTFILE=OutExcel /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND /EXCELOPTIONS SHEET='21_LUONG_P90' /KEEP = year quarter geo_code value.
+DATASET CLOSE B21.
+
+* =========================================================================.
+* BIỂU 22 và 23: TÍNH TOÁN CHÊNH LỆCH THU NHẬP (%) 
+* (Phải dùng AGGREGATE để tính chéo giữa 2 nhóm, không dùng CTABLES)
+* =========================================================================.
+DATASET ACTIVATE MicroLFS.
+DATASET DECLARE Temp_CL.
+DATASET COPY Temp_CL.
+DATASET ACTIVATE Temp_CL.
+* Lọc những người có việc làm và thu nhập > 0.
+SELECT IF (luong_thang > 0).
+* Tạo các cột thu nhập riêng lẻ cho từng nhóm để tính trung bình.
+COMPUTE luong_m = $SYSMIS.
+IF (sex = 'M') luong_m = luong_thang.
+COMPUTE luong_f = $SYSMIS.
+IF (sex = 'F') luong_f = luong_thang.
+COMPUTE luong_u = $SYSMIS.
+IF (area = 'Urban') luong_u = luong_thang.
+COMPUTE luong_r = $SYSMIS.
+IF (area = 'Rural') luong_r = luong_thang.
+EXECUTE.
+* --- Bước 1: Tính trung bình cấp QUỐC GIA ---.
+DATASET DECLARE CL_VN.
+AGGREGATE /OUTFILE='CL_VN'
+  /BREAK=year quarter vn_code
+  /mean_m = MEAN(luong_m)
+  /mean_f = MEAN(luong_f)
+  /mean_u = MEAN(luong_u)
+  /mean_r = MEAN(luong_r).
+
+* --- Bước 2: Tính trung bình cấp VÙNG ---.
+DATASET DECLARE CL_VUNG.
+AGGREGATE /OUTFILE='CL_VUNG'
+  /BREAK=year quarter vung_code
+  /mean_m = MEAN(luong_m)
+  /mean_f = MEAN(luong_f)
+  /mean_u = MEAN(luong_u)
+  /mean_r = MEAN(luong_r).
+
+* --- Bước 3: Tính trung bình cấp TỈNH ---.
+DATASET DECLARE CL_TINH.
+AGGREGATE /OUTFILE='CL_TINH'
+  /BREAK=year quarter tinh_code
+  /mean_m = MEAN(luong_m)
+  /mean_f = MEAN(luong_f)
+  /mean_u = MEAN(luong_u)
+  /mean_r = MEAN(luong_r).
+
+* --- Bước 4: Đổi tên thành geo_code và gộp 3 cấp lại ---.
+DATASET ACTIVATE CL_VN.
+RENAME VARIABLES (vn_code = geo_code).
+DATASET ACTIVATE CL_VUNG.
+RENAME VARIABLES (vung_code = geo_code).
+DATASET ACTIVATE CL_TINH.
+RENAME VARIABLES (tinh_code = geo_code).
+
+DATASET ACTIVATE CL_VN.
+ADD FILES /FILE=* /FILE='CL_VUNG' /FILE='CL_TINH'.
+EXECUTE.
+DATASET NAME B22_23.
+
+* Đóng các file rác.
+DATASET CLOSE Temp_CL.
+DATASET CLOSE CL_VUNG.
+DATASET CLOSE CL_TINH.
+
+* -------------------------------------------------------------------------.
+* BIỂU 22: CHÊNH LỆCH THU NHẬP NAM - NỮ (%)
+* -------------------------------------------------------------------------.
+DATASET ACTIVATE B22_23.
+DATASET DECLARE B22.
+DATASET COPY B22.
+DATASET ACTIVATE B22.
+
+* Công thức chuẩn: (Lương Nam - Lương Nữ)/Lương Nam * 100.
+COMPUTE value = ((mean_m - mean_f) / mean_m) * 100.
+
+MATCH FILES FILE=* /KEEP=year quarter geo_code value.
+SELECT IF NOT MISSING(value).
+ALTER TYPE year quarter (F4.0).
+
 SAVE TRANSLATE OUTFILE=OutExcel
   /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
-  /EXCELOPTIONS SHEET='21_LUONG_P90'
+  /EXCELOPTIONS SHEET='22_CL_LUONG_NAM_NU'
   /KEEP = year quarter geo_code value.
-DATASET CLOSE B21.
+DATASET CLOSE B22.
+
+* -------------------------------------------------------------------------.
+* BIỂU 23: CHÊNH LỆCH THU NHẬP THÀNH THỊ - NÔNG THÔN (%)
+* -------------------------------------------------------------------------.
+DATASET ACTIVATE B22_23.
+
+* Công thức chuẩn: (Lương Thành thị - Lương Nông thôn)/Lương Thành thị * 100.
+COMPUTE value = ((mean_u - mean_r) / mean_u) * 100.
+
+MATCH FILES FILE=* /KEEP=year quarter geo_code value.
+SELECT IF NOT MISSING(value).
+ALTER TYPE year quarter (F4.0).
+
+SAVE TRANSLATE OUTFILE=OutExcel
+  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
+  /EXCELOPTIONS SHEET='23_CL_LUONG_TT_NT'
+  /KEEP = year quarter geo_code value.
+DATASET CLOSE B22_23.
 
 * =========================================================================.
 * BIỂU 24: SỐ LAO ĐỘNG PHI CHÍNH THỨC (Phân tổ 1 chiều: Khu vực)
@@ -796,7 +931,6 @@ CTABLES
 OMSEND TAG=['t25'].
 
 DATASET ACTIVATE B25.
-* 7 cột định danh + 1 cột Tỷ lệ (Var8).
 RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Var6 Var7 V11 = year quarter geo_code sex area age_group sector value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
@@ -864,25 +998,20 @@ DATASET CLOSE B30.
 * =========================================================================.
 DATASET ACTIVATE MicroLFS.
 DATASET DECLARE B31.
-OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
-    /DESTINATION FORMAT=SAV OUTFILE='B31' /TAG='t31'.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] /DESTINATION FORMAT=SAV OUTFILE='B31' /TAG='t31'.
 TEMPORARY.
 SELECT IF (khongsdhet = 1).
-CTABLES
-  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code DISPLAY=NONE
-  /TABLE year > quarter > (vn_code + vung_code + tinh_code) [COUNT F40.0]
-  /SLABELS VISIBLE=NO
-  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
+CTABLES 
+/VLABELS VARIABLES=year quarter vn_code vung_code tinh_code DISPLAY=NONE 
+/TABLE year > quarter > (vn_code + vung_code + tinh_code) [COUNT F40.0] 
+/SLABELS VISIBLE=NO 
+/CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
 OMSEND TAG=['t31'].
-
 DATASET ACTIVATE B31.
 RENAME VARIABLES (Var1 Var2 Var3 Var4 = year quarter geo_code value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
-SAVE TRANSLATE OUTFILE=OutExcel
-  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
-  /EXCELOPTIONS SHEET='31_KHONG_SU_DUNG_HET'
-  /KEEP = year quarter geo_code value.
+SAVE TRANSLATE OUTFILE=OutExcel /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND /EXCELOPTIONS SHEET='31_KHONG_SU_DUNG_HET' /KEEP = year quarter geo_code value.
 DATASET CLOSE B31.
 
 * =========================================================================.
@@ -890,23 +1019,16 @@ DATASET CLOSE B31.
 * =========================================================================.
 DATASET ACTIVATE MicroLFS.
 DATASET DECLARE B32.
-OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] 
-    /DESTINATION FORMAT=SAV OUTFILE='B32' /TAG='t32'.
-CTABLES
-  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code ind_32 DISPLAY=NONE
-  /TABLE year > quarter > (vn_code + vung_code + tinh_code) BY ind_32 [MEAN F40.6]
-  /SLABELS VISIBLE=NO
-  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
+OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table'] /DESTINATION FORMAT=SAV OUTFILE='B32' /TAG='t32'.
+CTABLES /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code ind_32 DISPLAY=NONE 
+/TABLE year > quarter > (vn_code + vung_code + tinh_code) BY ind_32 [MEAN F40.6] 
+/SLABELS VISIBLE=NO /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE.
 OMSEND TAG=['t32'].
-
 DATASET ACTIVATE B32.
 RENAME VARIABLES (Var1 Var2 Var3 V7 = year quarter geo_code value).
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
-SAVE TRANSLATE OUTFILE=OutExcel
-  /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
-  /EXCELOPTIONS SHEET='32_TL_KHONG_SU_DUNG_HET'
-  /KEEP = year quarter geo_code value.
+SAVE TRANSLATE OUTFILE=OutExcel /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND /EXCELOPTIONS SHEET='32_TL_KHONG_SU_DUNG_HET' /KEEP = year quarter geo_code value.
 DATASET CLOSE B32.
 
 * =========================================================================.
@@ -1022,29 +1144,30 @@ OMS /SELECT TABLES /IF COMMANDS=['CTABLES'] SUBTYPES=['Custom Table']
 TEMPORARY.
 SELECT IF (luong_thang > 0).
 CTABLES
-  /VLABELS VARIABLES=year quarter vn_code vung_code income_grp DISPLAY=NONE
-  /TABLE year > quarter > geo_order > geo_code > income_grp [COUNT F40.0]
+  /VLABELS VARIABLES=year quarter vn_code vung_code tinh_code income_grp DISPLAY=NONE
+  /TABLE year > quarter > (vn_code + vung_code + tinh_code) > income_grp [COUNT F40.0]
   /SLABELS VISIBLE=NO
-  /CATEGORIES VARIABLES=year quarter geo_order geo_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
+  /CATEGORIES VARIABLES=year quarter vn_code vung_code tinh_code ORDER=A KEY=VALUE EMPTY=EXCLUDE
   /CATEGORIES VARIABLES=income_grp [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
               EMPTY=INCLUDE TOTAL=NO.
 OMSEND TAG=['t37'].
 
 DATASET ACTIVATE B37.
-* Bảng sinh ra 5 cột định danh + 1 cột Count.
-RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 Count = year quarter geo_order geo_code income_grp value).
+* Bảng sinh ra 4 cột định danh + 1 cột phân tổ income_grp + 1 cột số đếm (Var6).
+RENAME VARIABLES (Var1 Var2 Var3 Var4 Var5 = year quarter geo_code income_grp value).
 
+* Tính 2 cột cận thu nhập từ biến bậc lương.
 COMPUTE income_lower = income_grp * 2000000.
 COMPUTE income_upper = (income_grp + 1) * 2000000.
 
-MATCH FILES FILE=* /DROP=geo_order income_grp.
+MATCH FILES FILE=* /DROP=income_grp.
 SELECT IF NOT MISSING(value).
 ALTER TYPE year quarter (F4.0).
 ALTER TYPE income_lower income_upper value (F12.0).
 
 SAVE TRANSLATE OUTFILE=OutExcel
   /TYPE=XLS /VERSION=12 /FIELDNAMES VALUE=NAMES /CELLS=VALUES /APPEND
-  /EXCELOPTIONS SHEET='LFS_37_PHAN_BO_THU_NHAP'
+  /EXCELOPTIONS SHEET='37_PHAN_BO_THU_NHAP'
   /KEEP = year quarter geo_code income_lower income_upper value.
 DATASET CLOSE B37.
 
